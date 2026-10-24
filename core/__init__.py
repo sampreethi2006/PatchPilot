@@ -1,0 +1,1 @@
+"""PatchPilot core package."""

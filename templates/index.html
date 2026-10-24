@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PatchPilot AI - Autonomous Bug Investigation & Safe Repair</title>
+    <style>
+        :root {
+            --bg-canvas: #090d16;
+            --bg-card: #0f172a;
+            --bg-card-hover: #131e36;
+            --bg-inset: #060911;
+            --border: #1e293b;
+            --border-highlight: #334155;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --text-subtle: #64748b;
+            --cyan-accent: #38bdf8;
+            --cyan-glow: rgba(56, 189, 248, 0.15);
+            --green: #22c55e;
+            --green-glow: rgba(34, 197, 94, 0.15);
+            --red: #ef4444;
+            --red-glow: rgba(239, 68, 68, 0.15);
+            --amber: #f59e0b;
+            --amber-glow: rgba(245, 158, 11, 0.15);
+            --purple: #a855f7;
+            --font-code: "Consolas", "Monaco", "Ubuntu Mono", monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-canvas);
+            color: var(--text-main);
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+
+        /* App Header */
+        header {
+            background-color: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .brand-cluster {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-cluster h1 {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--cyan-accent);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .brand-badge {
+            background: rgba(56, 189, 248, 0.1);
+            color: var(--cyan-accent);
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            border-radius: 999px;
+            padding: 3px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .system-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--bg-inset);
+            border: 1px solid var(--border);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--text-subtle);
+        }
+
+        .status-dot.healthy { background-color: var(--green); box-shadow: 0 0 8px var(--green); }
+        .status-dot.warning { background-color: var(--amber); box-shadow: 0 0 8px var(--amber); }
+        .status-dot.error { background-color: var(--red); box-shadow: 0 0 8px var(--red); }
+
+        /* Main Container */
+        main {
+            max-width: 1380px;
+            margin: 24px auto;
+            padding: 0 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 22px;
+        }
+
+        /* Banner & Workflow bar */
+        .banner-card {
+            background: linear-gradient(180deg, #131c31 0%, var(--bg-card) 100%);
+            border: 1px solid var(--border-highlight);
+            border-radius: 12px;
+            padding: 20px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .banner-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .banner-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .workflow-steps {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .step-item {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            background: var(--bg-inset);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+        }
+
+        .step-item.active {
+            border-color: var(--cyan-accent);
+            color: var(--cyan-accent);
+            background: var(--cyan-glow);
+            font-weight: 600;
+        }
+
+        .step-item.completed {
+            border-color: var(--green);
+            color: var(--green);
+        }
+
+        /* Action bar */
+        .action-bar {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            padding-top: 6px;
+        }
+
+        button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 10px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s ease-in-out;
+            border: 1px solid transparent;
+            font-family: inherit;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed !important;
+        }
+
+        .btn-primary {
+            background: #0284c7;
+            color: white;
+            border-color: #0369a1;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #0369a1;
+        }
+
+        .btn-secondary {
+            background: var(--bg-inset);
+            color: var(--text-main);
+            border-color: var(--border-highlight);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: var(--bg-card-hover);
+            border-color: var(--cyan-accent);
+        }
+
+        .btn-success {
+            background: #15803d;
+            color: white;
+            border-color: #166534;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #166534;
+        }
+
+        .btn-warning {
+            background: #b45309;
+            color: white;
+            border-color: #92400e;
+        }
+
+        .btn-warning:hover:not(:disabled) {
+            background: #92400e;
+        }
+
+        .btn-danger {
+            background: #b91c1c;
+            color: white;
+            border-color: #991b1b;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #991b1b;
+        }
+
+        /* Layout Grid */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 20px;
+        }
+
+        .col-12 { grid-column: span 12; }
+        .col-8 { grid-column: span 8; }
+        .col-6 { grid-column: span 6; }
+        .col-4 { grid-column: span 4; }
+
+        @media (max-width: 1024px) {
+            .col-8, .col-6, .col-4 { grid-column: span 12; }
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            min-width: 0;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 12px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-main);
+        }
+
+        .card-subtitle {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Metric Counters */
+        .metrics-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 12px;
+        }
+
+        .metric-box {
+            background: var(--bg-inset);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .metric-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-subtle);
+            font-weight: 600;
+        }
+
+        .metric-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .metric-value.fail { color: var(--red); }
+        .metric-value.pass { color: var(--green); }
+
+        /* Facts and hypotheses */
+        .facts-list, .hypotheses-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .facts-list li, .hypotheses-list li {
+            font-size: 13px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            background: var(--bg-inset);
+            border-left: 3px solid var(--cyan-accent);
+            color: var(--text-muted);
+        }
+
+        .facts-list li strong {
+            color: var(--text-main);
+        }
+
+        .hypotheses-list li {
+            border-left-color: var(--amber);
+        }
+
+        /* Terminal output */
+        .terminal-block {
+            background: var(--bg-inset);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+            font-family: var(--font-code);
+            font-size: 12px;
+            color: #cbd5e1;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            max-height: 340px;
+            line-height: 1.6;
+        }
+
+        /* Diff Viewer */
+        .diff-container {
+            background: var(--bg-inset);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-family: var(--font-code);
+            font-size: 12px;
+            max-height: 380px;
+            overflow: auto;
+        }
+
+        .diff-line {
+            padding: 2px 10px;
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+
+        .diff-line.header {
+            background: rgba(56, 189, 248, 0.08);
+            color: var(--cyan-accent);
+            font-weight: 600;
+        }
+
+        .diff-line.add {
+            background: rgba(34, 197, 94, 0.15);
+            color: #86efac;
+        }
+
+        .diff-line.del {
+            background: rgba(239, 68, 68, 0.15);
+            color: #fca5a5;
+        }
+
+        .diff-line.chunk {
+            background: rgba(148, 163, 184, 0.1);
+            color: #94a3b8;
+        }
+
+        /* Memory Evidence cards */
+        .memory-card {
+            background: var(--bg-inset);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            transition: border-color 0.15s ease;
+        }
+
+        .memory-card:hover {
+            border-color: var(--border-highlight);
+        }
+
+        .memory-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+        }
+
+        .memory-id {
+            font-family: var(--font-code);
+            font-weight: 700;
+            color: var(--cyan-accent);
+        }
+
+        .memory-relevance {
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            color: var(--cyan-accent);
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .memory-content {
+            font-size: 13px;
+            color: var(--text-muted);
+            white-space: pre-wrap;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+
+        .memory-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 11px;
+            color: var(--text-subtle);
+            flex-wrap: wrap;
+        }
+
+        /* Search input */
+        .search-bar {
+            display: flex;
+            gap: 8px;
+        }
+
+        .search-input {
+            flex: 1;
+            background: var(--bg-inset);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: var(--text-main);
+            font-size: 13px;
+            outline: none;
+        }
+
+        .search-input:focus {
+            border-color: var(--cyan-accent);
+        }
+
+        /* Alert Callouts */
+        .callout {
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 13px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            border: 1px solid transparent;
+        }
+
+        .callout-info {
+            background: rgba(56, 189, 248, 0.08);
+            border-color: rgba(56, 189, 248, 0.2);
+            color: #bae6fd;
+        }
+
+        .callout-success {
+            background: var(--green-glow);
+            border-color: rgba(34, 197, 94, 0.3);
+            color: #bbf7d0;
+        }
+
+        .callout-warning {
+            background: var(--amber-glow);
+            border-color: rgba(245, 158, 11, 0.3);
+            color: #fde68a;
+        }
+
+        .callout-error {
+            background: var(--red-glow);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: #fecaca;
+        }
+
+        .tag {
+            display: inline-block;
+            background: var(--bg-inset);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 11px;
+            color: var(--text-subtle);
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="brand-cluster">
+            <h1><span>🚀</span> PatchPilot AI</h1>
+            <span class="brand-badge">Autonomous Software Repair</span>
+        </div>
+        <div class="header-controls">
+            <div class="system-pill" id="healthPill" title="Backend Health Status">
+                <span class="status-dot" id="healthDot"></span>
+                <span id="healthLabel">Checking backend...</span>
+            </div>
+            <button class="btn-secondary" onclick="checkHealth()" title="Refresh System Health">
+                🔄 Health
+            </button>
+            <button class="btn-warning" onclick="resetSampleRepository()" id="btnReset" title="Reset sample repo to intentional failing bug">
+                ↺ Reset Baseline Bug
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main>
+
+        <!-- Top Banner & Workflow Tracker -->
+        <section class="banner-card">
+            <div class="banner-top">
+                <div>
+                    <div class="banner-title">Repository Investigation & Fix Engine</div>
+                    <p class="card-subtitle">
+                        Target: <strong id="repoTargetName" style="color:var(--text-main);">sample_repo/ (Python Calculator)</strong>
+                        &nbsp;·&nbsp; Engine: <span class="tag" id="aiProviderTag">Deterministic Rule Analyzer</span>
+                        &nbsp;·&nbsp; Memory: <span class="tag" id="hmemStatusTag">Meterless H-MEM</span>
+                    </p>
+                </div>
+                <div class="workflow-steps">
+                    <span class="step-item completed" id="step1">1. Inspect</span>
+                    <span class="step-item" id="step2">2. Test & Diagnose</span>
+                    <span class="step-item" id="step3">3. Propose Patch</span>
+                    <span class="step-item" id="step4">4. Review Diff</span>
+                    <span class="step-item" id="step5">5. Apply & Verify</span>
+                    <span class="step-item" id="step6">6. Remember</span>
+                </div>
+            </div>
+
+            <!-- Primary Actions -->
+            <div class="action-bar">
+                <button class="btn-primary" id="btnDiagnose" onclick="runDiagnosis()">
+                    ⚡ Run Bug Diagnosis
+                </button>
+                <button class="btn-secondary" id="btnProposePatch" onclick="requestPatchProposal()">
+                    📝 Propose Minimal Patch
+                </button>
+                <button class="btn-success" id="btnApplyPatch" onclick="confirmAndApplyPatch()" disabled>
+                    🛡️ Apply Patch & Verify Fix
+                </button>
+                <span id="actionStatus" style="font-size:13px; color:var(--cyan-accent); margin-left:8px;"></span>
+            </div>
+        </section>
+
+        <!-- Dashboard Grid -->
+        <div class="dashboard-grid">
+
+            <!-- Panel 1: Discovered Bug & Root-Cause Analysis -->
+            <section class="card col-6">
+                <div class="card-header">
+                    <div class="card-title">🔍 Root-Cause Analysis</div>
+                    <span class="tag" id="analysisMethodTag">Awaiting Run</span>
+                </div>
+
+                <div id="rootCauseContainer">
+                    <p class="card-subtitle" style="font-size:13px;">
+                        Click <strong>Run Bug Diagnosis</strong> to execute the test suite and extract evidence.
+                    </p>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    <strong style="font-size:12px; text-transform:uppercase; color:var(--text-subtle);">Confirmed Facts</strong>
+                    <ul class="facts-list" id="confirmedFactsList">
+                        <li>No diagnosis executed yet.</li>
+                    </ul>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    <strong style="font-size:12px; text-transform:uppercase; color:var(--text-subtle);">Diagnostic Hypotheses & Fix Suggestions</strong>
+                    <ul class="hypotheses-list" id="hypothesesList">
+                        <li>Awaiting test execution.</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Panel 2: Test Results & Terminal Traceback -->
+            <section class="card col-6">
+                <div class="card-header">
+                    <div class="card-title">🧪 Test Execution Evidence</div>
+                    <span id="testBadge" class="tag">Tests Idle</span>
+                </div>
+
+                <div class="metrics-row">
+                    <div class="metric-box">
+                        <span class="metric-label">Status</span>
+                        <span class="metric-value" id="metricStatus">--</span>
+                    </div>
+                    <div class="metric-box">
+                        <span class="metric-label">Failed Tests</span>
+                        <span class="metric-value" id="metricFailed">--</span>
+                    </div>
+                    <div class="metric-box">
+                        <span class="metric-label">Passed Tests</span>
+                        <span class="metric-value" id="metricPassed">--</span>
+                    </div>
+                    <div class="metric-box">
+                        <span class="metric-label">Duration</span>
+                        <span class="metric-value" id="metricDuration">--</span>
+                    </div>
+                </div>
+
+                <pre class="terminal-block" id="terminalOutput">Pytest output and failure tracebacks will appear here...</pre>
+            </section>
+
+            <!-- Panel 3: Reviewable Proposed Patch (Unified Diff) -->
+            <section class="card col-8">
+                <div class="card-header">
+                    <div class="card-title">🛡️ Proposed Patch Review</div>
+                    <div>
+                        <span class="tag" id="patchTargetTag">calculator.py</span>
+                        <span class="tag" id="patchStatusTag">Not Proposed</span>
+                    </div>
+                </div>
+
+                <div class="callout callout-info" id="patchCallout">
+                    <span><strong>Human Review Policy:</strong> PatchPilot never modifies your codebase blindly. Inspect the proposed unified diff below before confirming execution.</span>
+                </div>
+
+                <div class="diff-container" id="diffContainer">
+                    <div class="diff-line chunk">No proposed patch yet. Click 'Run Bug Diagnosis' or 'Propose Minimal Patch'.</div>
+                </div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                    <span id="patchSafetyNote" style="font-size:12px; color:var(--text-subtle);">
+                        Verified safe path traversal & backup preservation enabled.
+                    </span>
+                    <button class="btn-success" id="btnApplyPatchInner" onclick="confirmAndApplyPatch()" disabled>
+                        ✓ Approve & Apply Patch
+                    </button>
+                </div>
+            </section>
+
+            <!-- Panel 4: Memory Evidence (Meterless H-MEM) -->
+            <section class="card col-4">
+                <div class="card-header">
+                    <div class="card-title">🧠 Local H-MEM Memory</div>
+                    <span class="tag">Meterless Storage</span>
+                </div>
+
+                <div class="search-bar">
+                    <input type="text" class="search-input" id="memorySearchInput" placeholder="Search memory (e.g. division)..." onkeydown="if(event.key==='Enter') searchMemory()">
+                    <button class="btn-secondary" onclick="searchMemory()">Search</button>
+                </div>
+
+                <div id="memoryStatusNotice" style="font-size:12px; color:var(--text-muted);">
+                    H-MEM captures failure tracebacks and verified fixes across runs.
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:10px; max-height:400px; overflow-y:auto;" id="memoriesList">
+                    <div class="memory-card">
+                        <p style="font-size:12px; color:var(--text-subtle);">No memory query run yet.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Panel 5: Verification & Audit Trail -->
+            <section class="card col-12">
+                <div class="card-header">
+                    <div class="card-title">📋 Verification & Audit Trail</div>
+                    <span class="tag" id="auditStatusTag">Audit Idle</span>
+                </div>
+
+                <div id="auditLog" style="font-size:13px; color:var(--text-muted); display:flex; flex-direction:column; gap:6px;">
+                    <div>• Ready. Load status checked.</div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // State management
+        const state = {
+            diagnosis: null,
+            patchProposal: null,
+            lastVerification: null,
+            cachedHealth: null
+        };
+
+        // Utility: Append to audit log
+        function logAudit(message, type = 'info') {
+            const container = document.getElementById("auditLog");
+            const entry = document.createElement("div");
+            const timestamp = new Date().toLocaleTimeString();
+            let prefix = '•';
+            if (type === 'success') prefix = '✓';
+            if (type === 'error') prefix = '⚠️';
+            entry.innerHTML = `<span style="color:var(--text-subtle)">[${timestamp}]</span> <strong>${prefix}</strong> ${message}`;
+            container.prepend(entry);
+        }
+
+        // Set workflow step states
+        function setWorkflowStep(stepNumber, status = 'active') {
+            for (let i = 1; i <= 6; i++) {
+                const el = document.getElementById(`step${i}`);
+                if (!el) continue;
+                if (i < stepNumber) {
+                    el.className = 'step-item completed';
+                } else if (i === stepNumber) {
+                    el.className = `step-item ${status}`;
+                } else {
+                    el.className = 'step-item';
+                }
+            }
+        }
+
+        // Check backend health
+        async function checkHealth() {
+            const dot = document.getElementById("healthDot");
+            const label = document.getElementById("healthLabel");
+            try {
+                const res = await fetch("/api/health");
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                state.cachedHealth = data;
+
+                dot.className = "status-dot healthy";
+                label.textContent = `Online: Python ${data.environment.python_version} (Port ${data.environment.port})`;
+                
+                if (data.ai_provider?.name) {
+                    document.getElementById("aiProviderTag").textContent = data.ai_provider.name;
+                }
+                if (data.hmem?.ready) {
+                    document.getElementById("hmemStatusTag").textContent = "H-MEM Active";
+                    document.getElementById("hmemStatusTag").style.color = "var(--green)";
+                } else {
+                    document.getElementById("hmemStatusTag").textContent = "H-MEM Degraded";
+                    document.getElementById("hmemStatusTag").style.color = "var(--amber)";
+                }
+                logAudit("Backend health verified: Pytest ready, H-MEM bridge responsive.", "success");
+            } catch (err) {
+                dot.className = "status-dot error";
+                label.textContent = "Backend Unreachable";
+                logAudit(`Health check failed: ${err.message}`, "error");
+            }
+        }
+
+        // Run diagnosis workflow
+        async function runDiagnosis() {
+            const btn = document.getElementById("btnDiagnose");
+            const statusEl = document.getElementById("actionStatus");
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner"></span> Analyzing Repository...`;
+            statusEl.textContent = "Running pytest & H-MEM analysis...";
+            setWorkflowStep(2, 'active');
+
+            try {
+                const res = await fetch("/api/diagnose", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.diagnosis || `Server responded with ${res.status}`);
+                }
+
+                const data = await res.json();
+                state.diagnosis = data;
+                renderDiagnosis(data);
+                logAudit(`Diagnosis completed: ${data.diagnosis}`, data.tests_passed ? "success" : "warning");
+                statusEl.textContent = data.tests_passed ? "Diagnosis clean: all tests passed." : "Bug detected and analyzed.";
+                setWorkflowStep(3, 'completed');
+            } catch (err) {
+                statusEl.textContent = `Diagnosis error: ${err.message}`;
+                logAudit(`Diagnosis execution error: ${err.message}`, "error");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `⚡ Run Bug Diagnosis`;
+            }
+        }
+
+        // Render diagnosis data into UI panels
+        function renderDiagnosis(data) {
+            // Metrics
+            const metricStatus = document.getElementById("metricStatus");
+            const metricFailed = document.getElementById("metricFailed");
+            const metricPassed = document.getElementById("metricPassed");
+            const metricDuration = document.getElementById("metricDuration");
+            const testBadge = document.getElementById("testBadge");
+
+            if (data.tests_passed) {
+                metricStatus.textContent = "PASSED";
+                metricStatus.className = "metric-value pass";
+                testBadge.textContent = "PASS";
+                testBadge.style.color = "var(--green)";
+            } else {
+                metricStatus.textContent = "FAILED";
+                metricStatus.className = "metric-value fail";
+                testBadge.textContent = "FAIL";
+                testBadge.style.color = "var(--red)";
+            }
+
+            metricFailed.textContent = data.summary?.failed ?? (data.failures?.length || 0);
+            metricPassed.textContent = data.summary?.passed ?? 0;
+            metricDuration.textContent = `${data.duration_sec ?? 0}s`;
+
+            // Terminal
+            document.getElementById("terminalOutput").textContent = data.output || "No test output returned.";
+
+            // Root Cause
+            const rootCauseContainer = document.getElementById("rootCauseContainer");
+            const rc = data.root_cause || {};
+            rootCauseContainer.innerHTML = `
+                <div class="callout ${data.tests_passed ? 'callout-success' : 'callout-error'}">
+                    <div>
+                        <strong>${rc.root_cause || data.diagnosis}</strong>
+                        <div style="margin-top:6px; font-size:12px; color:var(--text-muted);">
+                            Expected: ${rc.expected_behavior || 'Standard execution'}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById("analysisMethodTag").textContent = rc.method || "Analysis Engine";
+
+            // Confirmed Facts
+            const factsList = document.getElementById("confirmedFactsList");
+            factsList.replaceChildren();
+            const facts = rc.confirmed_facts || [];
+            if (facts.length === 0) {
+                const li = document.createElement("li");
+                li.textContent = "No specific confirmed facts extracted.";
+                factsList.appendChild(li);
+            } else {
+                facts.forEach(f => {
+                    const li = document.createElement("li");
+                    li.innerHTML = `<strong>Fact:</strong> ${escapeHtml(f)}`;
+                    factsList.appendChild(li);
+                });
+            }
+
+            // Hypotheses
+            const hypothesesList = document.getElementById("hypothesesList");
+            hypothesesList.replaceChildren();
+            const hypotheses = rc.hypotheses || [];
+            if (hypotheses.length === 0) {
+                const li = document.createElement("li");
+                li.textContent = rc.suggested_fix ? `Fix suggestion: ${rc.suggested_fix}` : "No hypotheses recorded.";
+                hypothesesList.appendChild(li);
+            } else {
+                hypotheses.forEach(h => {
+                    const li = document.createElement("li");
+                    li.innerHTML = `<strong>Hypothesis:</strong> ${escapeHtml(h)}`;
+                    hypothesesList.appendChild(li);
+                });
+                if (rc.suggested_fix) {
+                    const li = document.createElement("li");
+                    li.innerHTML = `<strong>Suggested Action:</strong> ${escapeHtml(rc.suggested_fix)}`;
+                    hypothesesList.appendChild(li);
+                }
+            }
+
+            // Patch Proposal
+            if (data.patch_proposal) {
+                renderPatchProposal(data.patch_proposal);
+            }
+
+            // Memories
+            if (data.related_findings) {
+                renderMemories(data.related_findings);
+            }
+        }
+
+        // Render Patch Diff
+        function renderPatchProposal(proposal) {
+            state.patchProposal = proposal;
+            const container = document.getElementById("diffContainer");
+            const targetTag = document.getElementById("patchTargetTag");
+            const statusTag = document.getElementById("patchStatusTag");
+            const btnApply1 = document.getElementById("btnApplyPatch");
+            const btnApply2 = document.getElementById("btnApplyPatchInner");
+
+            targetTag.textContent = proposal.file_path || "calculator.py";
+            statusTag.textContent = "Pending Review";
+            statusTag.style.color = "var(--amber)";
+
+            btnApply1.disabled = false;
+            btnApply2.disabled = false;
+
+            const diffText = proposal.unified_diff || "";
+            container.replaceChildren();
+
+            if (!diffText.trim()) {
+                const line = document.createElement("div");
+                line.className = "diff-line chunk";
+                line.textContent = "No modifications detected between current code and proposal.";
+                container.appendChild(line);
+                return;
+            }
+
+            diffText.split("\n").forEach(lineStr => {
+                const lineEl = document.createElement("div");
+                lineEl.textContent = lineStr;
+                if (lineStr.startsWith("---") || lineStr.startsWith("+++")) {
+                    lineEl.className = "diff-line header";
+                } else if (lineStr.startsWith("+")) {
+                    lineEl.className = "diff-line add";
+                } else if (lineStr.startsWith("-")) {
+                    lineEl.className = "diff-line del";
+                } else if (lineStr.startsWith("@@")) {
+                    lineEl.className = "diff-line chunk";
+                } else {
+                    lineEl.className = "diff-line";
+                }
+                container.appendChild(lineEl);
+            });
+
+            setWorkflowStep(4, 'active');
+        }
+
+        // Propose patch independently
+        async function requestPatchProposal() {
+            const btn = document.getElementById("btnProposePatch");
+            btn.disabled = true;
+            try {
+                const res = await fetch("/api/patch/propose", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
+                });
+                const data = await res.json();
+                if (data.status === "success" && data.proposal) {
+                    renderPatchProposal(data.proposal);
+                    logAudit(`Generated reviewable patch proposal for ${data.proposal.file_path}`, "info");
+                }
+            } catch (err) {
+                logAudit(`Patch proposal error: ${err.message}`, "error");
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // Apply Patch and Verify Fix
+        async function confirmAndApplyPatch() {
+            if (!confirm("Are you sure you want to apply the proposed patch to the repository and run verification tests?")) {
+                return;
+            }
+
+            const btn1 = document.getElementById("btnApplyPatch");
+            const btn2 = document.getElementById("btnApplyPatchInner");
+            const statusEl = document.getElementById("actionStatus");
+
+            btn1.disabled = true;
+            btn2.disabled = true;
+            statusEl.textContent = "Applying patch and running verification tests...";
+            setWorkflowStep(5, 'active');
+
+            try {
+                const res = await fetch("/api/patch/apply", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        file_path: state.patchProposal?.file_path || "calculator.py",
+                        patched_code: state.patchProposal?.patched_code
+                    })
+                });
+
+                const data = await res.json();
+                if (!res.ok || data.status !== "success") {
+                    throw new Error(data.message || "Failed to apply patch.");
+                }
+
+                const result = data.patch_result || {};
+                const verified = result.verified;
+
+                const statusTag = document.getElementById("patchStatusTag");
+                const patchCallout = document.getElementById("patchCallout");
+
+                if (verified) {
+                    statusTag.textContent = "Applied & Verified ✓";
+                    statusTag.style.color = "var(--green)";
+                    patchCallout.className = "callout callout-success";
+                    patchCallout.innerHTML = `<strong>✓ Success:</strong> Patch was applied and verified! All tests in the test suite passed with return code 0.`;
+                    statusEl.textContent = "Patch successfully applied and verified!";
+                    logAudit(`Patch applied to ${result.file_path}. Verification tests PASSED.`, "success");
+                    setWorkflowStep(6, 'completed');
+                } else {
+                    statusTag.textContent = "Applied (Unverified) ⚠️";
+                    statusTag.style.color = "var(--amber)";
+                    patchCallout.className = "callout callout-warning";
+                    patchCallout.innerHTML = `<strong>Warning:</strong> Patch was applied, but verification tests did not pass. Check test output.`;
+                    logAudit(`Patch applied, but verification tests failed.`, "warning");
+                }
+
+                // Refresh diagnosis view with post-patch test results
+                if (result.test_run) {
+                    renderDiagnosis({
+                        tests_passed: result.test_run.passed,
+                        return_code: result.test_run.return_code,
+                        duration_sec: result.test_run.duration_sec,
+                        output: result.test_run.output,
+                        summary: result.test_run.summary,
+                        failures: result.test_run.failures,
+                        diagnosis: verified ? "All tests passed after patch verification." : "Post-patch verification failed.",
+                        root_cause: {
+                            root_cause: verified ? "Bug resolved. Divisor validation added." : "Pending further fixes.",
+                            expected_behavior: "All assertions pass.",
+                            method: "Automated Post-Patch Verification Run"
+                        }
+                    });
+                }
+            } catch (err) {
+                statusEl.textContent = `Apply error: ${err.message}`;
+                logAudit(`Patch application error: ${err.message}`, "error");
+            } finally {
+                btn1.disabled = false;
+                btn2.disabled = false;
+            }
+        }
+
+        // Reset Sample Repository
+        async function resetSampleRepository() {
+            if (!confirm("Reset sample repository to its pristine, intentionally failing bug state? This allows repeating the demonstration.")) {
+                return;
+            }
+
+            const btn = document.getElementById("btnReset");
+            const statusEl = document.getElementById("actionStatus");
+            btn.disabled = true;
+            statusEl.textContent = "Resetting sample repository...";
+
+            try {
+                const res = await fetch("/api/repo/reset", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.message || "Reset failed");
+
+                logAudit("Sample repository reset to intentional division-by-zero bug baseline.", "info");
+                statusEl.textContent = "Baseline bug restored.";
+
+                // Automatically run diagnosis on reset baseline
+                await runDiagnosis();
+            } catch (err) {
+                statusEl.textContent = `Reset error: ${err.message}`;
+                logAudit(`Reset failed: ${err.message}`, "error");
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // Search H-MEM Memory
+        async function searchMemory() {
+            const input = document.getElementById("memorySearchInput");
+            const query = input.value.trim();
+            if (!query) return;
+
+            const notice = document.getElementById("memoryStatusNotice");
+            notice.textContent = `Querying H-MEM for "${query}"...`;
+
+            try {
+                const res = await fetch("/api/memory/search", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ query })
+                });
+
+                const data = await res.json();
+                if (data.status === "success" && data.results) {
+                    renderMemories(data.results);
+                    notice.textContent = `Retrieved ${data.results.memories?.length || 0} findings from H-MEM.`;
+                    logAudit(`Queried H-MEM for "${query}": ${data.results.memories?.length || 0} results.`, "info");
+                }
+            } catch (err) {
+                notice.textContent = `Memory search error: ${err.message}`;
+            }
+        }
+
+        // Render Memory Evidence cards
+        function renderMemories(data) {
+            const container = document.getElementById("memoriesList");
+            container.replaceChildren();
+
+            const memories = data?.memories || [];
+            if (memories.length === 0) {
+                const empty = document.createElement("div");
+                empty.className = "memory-card";
+                empty.innerHTML = `<p style="font-size:12px; color:var(--text-subtle);">No memories matched the search query or retrieval threshold.</p>`;
+                container.appendChild(empty);
+                return;
+            }
+
+            memories.forEach(item => {
+                const card = document.createElement("article");
+                card.className = "memory-card";
+
+                const relevance = Number(item.relevance);
+                const relPct = Number.isFinite(relevance) ? `${(relevance * 100).toFixed(1)}%` : "N/A";
+                const conf = Number(item.confidence);
+                const confPct = Number.isFinite(conf) ? `${(conf * 100).toFixed(0)}%` : "N/A";
+
+                card.innerHTML = `
+                    <div class="memory-header">
+                        <span class="memory-id">🔖 ${escapeHtml(item.id || 'Memory')}</span>
+                        <span class="memory-relevance">Relevance: ${relPct}</span>
+                    </div>
+                    <div class="memory-content">${escapeHtml(item.content || '')}</div>
+                    <div class="memory-meta">
+                        <span>Source: <code>${escapeHtml(item.source || 'repository')}</code></span>
+                        <span>Confidence: <strong>${confPct}</strong></span>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // HTML escaping utility
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Initialize on load
+        window.addEventListener("DOMContentLoaded", () => {
+            checkHealth();
+            // Automatically discover initial baseline
+            runDiagnosis();
+        });
+    </script>
+</body>
+</html>
